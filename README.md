@@ -60,6 +60,27 @@ Le jeu est pensé pour fonctionner aussi bien à la souris/clavier sur PC qu'au 
 
 - **Plein écran fonctionnel avec ses contrôles.** Le bouton plein écran ne rend fullscreen que la zone de jeu (`#stage`) : le pavé directionnel, qui était auparavant un bloc séparé plus bas dans la page, a été déplacé à l'intérieur de `#stage` (en overlay semi-transparent ancré en bas de la zone de jeu) afin de rester visible et utilisable une fois en plein écran. Sans ce changement, le plein écran affichait uniquement le canvas sans aucun moyen d'avancer/reculer sur un appareil sans clavier. `#stage` s'agrandit également pour occuper tout l'écran en plein écran (au lieu de rester limité à sa largeur/hauteur habituelles), et le canvas est recalculé automatiquement à chaque entrée/sortie du plein écran.
 
+## Dernière passe d'analyse (revue exhaustive)
+
+Une relecture complète, ligne par ligne, du HTML/CSS/JS a permis de trouver et corriger quatre problèmes supplémentaires, tous mineurs mais réels et reproductibles :
+
+1. **Touches « fantômes » après perte de focus.** En maintenant une touche (ex. avancer) puis en changeant d'onglet ou d'application sans la relâcher, l'événement `keyup` n'était jamais reçu : le personnage continuait de bouger tout seul au retour, y compris après une reprise de pause. Corrigé en vidant l'état des touches à chaque mise en pause, avec un filet de sécurité supplémentaire sur l'événement `blur` de la fenêtre.
+2. **Raccourcis clavier qui « fuyaient » vers les champs de formulaire.** Les flèches étaient interceptées globalement même quand le focus était sur un curseur (sensibilité, taille d'avatar, niveau) ou le champ numérique de niveau — qui répondent eux-mêmes aux flèches. Résultat : régler la sensibilité au clavier faisait aussi tourner le personnage en arrière-plan. Les raccourcis WASD/flèches/R/F sont désormais ignorés quand le focus est sur un `<input>`/`<select>` (le relâchement des touches, lui, reste toujours pris en compte pour ne jamais laisser une touche bloquée).
+3. **Clic droit sur la zone de jeu.** Un glissé au bouton droit de la souris faisait à la fois tourner la caméra et ouvrait le menu contextuel du navigateur au relâchement, faute de filtrer le bouton utilisé. Le clic droit/molette est désormais ignoré pour la rotation, et le menu contextuel est désactivé sur la zone de jeu.
+4. **Logs de débogage bavards.** Le message de log affiché à chaque redimensionnement se déclenchait désormais bien plus souvent qu'avant (rotation d'écran, plein écran, barre d'adresse mobile) et aurait spammé la console. Retiré.
+
+En prime, le curseur de la souris passe maintenant de « grab » à « grabbing » pendant le glissement, pour un retour visuel plus clair.
+
+## Dernière passe de relecture complète
+
+Une relecture exhaustive du fichier (CSS, HTML, JS, ligne par ligne) a permis de corriger cinq derniers points :
+
+1. **Ordre d'initialisation incorrect.** `this.view.getContext('2d')` était appelé avant la vérification `if (!this.view || !this.mini)`, rendant ce garde-fou inatteignable : si un des deux canvas n'existait pas, le script plantait avant même de pouvoir afficher le message d'erreur prévu. Corrigé en vérifiant d'abord la présence des éléments.
+2. **La simulation continuait de tourner derrière les panneaux « Paramètres » et « Carte des niveaux ».** Ces panneaux recouvrent toute la zone de jeu mais ne mettaient pas le jeu en pause : le chrono, la distance parcourue, les déplacements au clavier, voire la détection de victoire, continuaient à s'exécuter alors que le joueur ne voyait plus le labyrinthe. La boucle de mise à jour vérifie désormais si l'un de ces panneaux est ouvert et suspend la simulation en conséquence.
+3. **Curseur bloqué en « grabbing ».** Si la pause était déclenchée (touche Échap, bouton pause) pendant un glissement de la souris pour tourner la caméra, le curseur restait visuellement en mode « saisie » au lieu de revenir à la normale.
+4. **`backdrop-filter` sans préfixe `-webkit-`** sur les boutons du pavé directionnel, pouvant ne pas s'appliquer sur Safari/iOS plus anciens.
+5. **Incohérence de largeur entre les deux curseurs de réglage** (sensibilité et taille d'avatar) : seul le premier avait une largeur explicite, le second dépendait de la valeur par défaut du navigateur.
+
 ## Corrections apportées
 
 Le code fourni était déjà solide dans son ensemble (génération de labyrinthe, moteur de raycasting, sauvegarde de progression) mais contenait deux défauts fonctionnels, corrigés dans cette version :
