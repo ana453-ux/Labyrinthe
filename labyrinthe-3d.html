@@ -1,0 +1,2042 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Labyrinthe 3D</title>
+  <style>
+    /* ===== STYLES GARDEZ LES MÊMES ===== */
+    :root {
+      --bg: #0a0b0d;
+      --panel: #101319;
+      --line: #22262f;
+      --text: #d9dce2;
+      --muted: #7d8493;
+      --accent: #4ade80;
+      --error: #ff4444;
+    }
+
+    * {
+      box-sizing: border-box;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html,
+    body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 10px;
+      min-height: 100vh;
+      user-select: none;
+    }
+
+    h1 {
+      font-size: clamp(16px, 4vw, 19px);
+      font-weight: 600;
+      margin: 0 0 4px;
+      text-align: center;
+    }
+
+    p.sub {
+      color: var(--muted);
+      font-size: 12.5px;
+      margin: 0 0 14px;
+      text-align: center;
+      max-width: 480px;
+    }
+
+    #stage {
+      position: relative;
+      width: min(640px, 96vw);
+      aspect-ratio: 16 / 10;
+      max-height: 62vh;
+      background: #000;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      overflow: hidden;
+      margin: 0 auto;
+      min-height: 300px;
+    }
+
+    canvas#view {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: grab;
+      touch-action: none;
+      background: #0a0b0d;
+    }
+
+    canvas#mini {
+      position: absolute;
+      top: 3%;
+      right: 3%;
+      width: 20%;
+      aspect-ratio: 1 / 1;
+      min-width: 64px;
+      max-width: 120px;
+      background: rgba(8, 9, 12, 0.75);
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      display: block;
+      z-index: 5;
+    }
+
+    #hint,
+    #fullscreenBtn,
+    #pauseBtn {
+      position: absolute;
+      top: 8px;
+      width: 34px;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      color: var(--text);
+      background: rgba(8, 9, 12, 0.6);
+      border: 1px solid var(--line);
+      border-radius: 50%;
+      padding: 0;
+      cursor: pointer;
+      z-index: 10;
+      transition: all 0.2s ease;
+    }
+
+    #hint {
+      left: 8px;
+    }
+    #fullscreenBtn {
+      left: 50px;
+    }
+    #pauseBtn {
+      left: 92px;
+    }
+
+    #hint:hover,
+    #fullscreenBtn:hover,
+    #pauseBtn:hover {
+      background: rgba(23, 27, 34, 0.85);
+      transform: scale(1.05);
+    }
+
+    #levelBadge {
+      position: absolute;
+      left: 50%;
+      top: 8px;
+      transform: translateX(-50%);
+      font-size: clamp(10px, 2.4vw, 12px);
+      font-weight: 600;
+      color: var(--accent);
+      background: rgba(8, 9, 12, 0.6);
+      padding: 3px 10px;
+      border-radius: 4px;
+      z-index: 10;
+    }
+
+    #winOverlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(6, 8, 10, 0.88);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      text-align: center;
+      z-index: 20;
+      animation: fadeIn 0.5s ease;
+    }
+
+    #winOverlay.show {
+      display: flex;
+    }
+
+    #winOverlay p {
+      margin: 0;
+      font-size: 20px;
+      color: var(--accent);
+      font-weight: 600;
+    }
+
+    #winOverlay span {
+      font-size: 14px;
+      color: var(--muted);
+    }
+
+    #settingsOverlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(6, 8, 10, 0.95);
+      display: none;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: center;
+      padding: 20px;
+      gap: 12px;
+      overflow-y: auto;
+      z-index: 30;
+      animation: fadeIn 0.3s ease;
+    }
+
+    #settingsOverlay.show {
+      display: flex;
+    }
+
+    #settingsOverlay h2 {
+      font-size: 16px;
+      margin: 0 0 4px;
+      text-align: center;
+      color: var(--accent);
+    }
+
+    .setting-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      font-size: 13px;
+      padding: 4px 0;
+    }
+
+    .setting-row select,
+    .setting-row input[type="color"] {
+      background: #171b22;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      padding: 6px 8px;
+      font-size: 13px;
+      min-width: 140px;
+    }
+
+    .setting-row input[type="color"] {
+      width: 40px;
+      height: 32px;
+      padding: 2px;
+      cursor: pointer;
+    }
+
+    .setting-row .sens-slider {
+      width: 140px;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 38px;
+      height: 22px;
+      flex-shrink: 0;
+    }
+
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .switch-track {
+      position: absolute;
+      inset: 0;
+      background: var(--line);
+      border-radius: 22px;
+      transition: background 0.15s;
+    }
+
+    .switch-track::before {
+      content: "";
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      left: 3px;
+      top: 3px;
+      background: #d9dce2;
+      border-radius: 50%;
+      transition: transform 0.15s;
+    }
+
+    .switch input:checked+.switch-track {
+      background: var(--accent);
+    }
+
+    .switch input:checked+.switch-track::before {
+      transform: translateX(16px);
+    }
+
+    .actions {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 10px;
+      margin-top: 4px;
+    }
+
+    .actions.win-actions {
+      grid-column: unset;
+      max-width: 280px;
+    }
+
+    .actions.settings-actions {
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+
+    .actions.settings-actions button {
+      flex: 1;
+      min-width: 100px;
+    }
+
+    button {
+      flex: 1;
+      background: #171b22;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      padding: 10px 14px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      min-height: 40px;
+    }
+
+    button:hover:not(:disabled) {
+      background: #1d222b;
+      border-color: #33394a;
+      transform: translateY(-1px);
+    }
+
+    button:active:not(:disabled) {
+      transform: translateY(0px);
+    }
+
+    button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    button.primary {
+      background: #17331f;
+      border-color: #2a5236;
+    }
+
+    button.primary:hover:not(:disabled) {
+      background: #1c3f26;
+    }
+
+    button.danger {
+      background: #331717;
+      border-color: #522a2a;
+    }
+
+    button.danger:hover:not(:disabled) {
+      background: #3f1c1c;
+    }
+
+    #pauseOverlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(6, 8, 10, 0.88);
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      text-align: center;
+      z-index: 15;
+      animation: fadeIn 0.3s ease;
+    }
+
+    #pauseOverlay.show {
+      display: flex;
+    }
+
+    #pauseOverlay p {
+      margin: 0;
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    #levelMapOverlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(6, 8, 10, 0.94);
+      display: none;
+      flex-direction: column;
+      align-items: stretch;
+      justify-content: flex-start;
+      padding: 14px;
+      gap: 10px;
+      z-index: 25;
+      animation: fadeIn 0.3s ease;
+    }
+
+    #levelMapOverlay.show {
+      display: flex;
+    }
+
+    #levelMapOverlay h2 {
+      font-size: 15px;
+      margin: 0;
+      text-align: center;
+      color: var(--accent);
+    }
+
+    .legend {
+      display: flex;
+      justify-content: center;
+      gap: 14px;
+      font-size: 10.5px;
+      color: var(--muted);
+    }
+
+    .legend span {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .legend i {
+      width: 9px;
+      height: 9px;
+      border-radius: 2px;
+      display: inline-block;
+    }
+
+    .legend i.legend-todo {
+      background: #171b22;
+      border: 1px solid #22262f;
+    }
+    .legend i.legend-done {
+      background: #17331f;
+      border: 1px solid #2a5236;
+    }
+    .legend i.legend-locked {
+      background: #171b22;
+      opacity: 0.4;
+    }
+
+    .grid-levels {
+      display: grid;
+      grid-template-columns: repeat(10, 1fr);
+      gap: 4px;
+      overflow-y: auto;
+      flex: 1;
+      padding: 4px 0;
+      max-height: 60vh;
+    }
+
+    .grid-levels button {
+      flex: none;
+      padding: 0;
+      aspect-ratio: 1 / 1;
+      font-size: 10px;
+      border-radius: 4px;
+      min-height: 28px;
+    }
+
+    .grid-levels button.completed {
+      background: #17331f;
+      border-color: #2a5236;
+    }
+
+    .grid-levels button.current {
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 12px rgba(74, 222, 128, 0.2);
+    }
+
+    .grid-levels button:disabled {
+      opacity: 0.3;
+    }
+
+    .levelmap-row {
+      width: min(640px, 96vw);
+      margin-top: 12px;
+    }
+
+    .levelmap-row button {
+      width: 100%;
+    }
+
+    #stats {
+      position: absolute;
+      left: 8px;
+      bottom: 8px;
+      font-size: clamp(9px, 2.2vw, 11px);
+      color: rgba(217, 220, 226, 0.7);
+      background: rgba(8, 9, 12, 0.55);
+      padding: 3px 7px;
+      border-radius: 4px;
+      z-index: 10;
+      pointer-events: none;
+    }
+
+    #hintLine {
+      width: min(640px, 96vw);
+      text-align: center;
+      font-size: 11.5px;
+      color: var(--muted);
+      margin-top: 8px;
+    }
+
+    .panel {
+      width: min(640px, 96vw);
+      margin-top: 14px;
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 14px 16px;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px 20px;
+    }
+
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .field label {
+      font-size: 12px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .field label .error-text {
+      color: var(--error);
+      font-size: 11px;
+    }
+
+    select,
+    input[type="number"] {
+      background: #171b22;
+      color: var(--text);
+      border: 1px solid var(--line);
+      border-radius: 5px;
+      padding: 7px 8px;
+      font-size: 13px;
+      width: 100%;
+      transition: border-color 0.2s ease;
+    }
+
+    select:focus,
+    input[type="number"]:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+
+    input[type="range"] {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 3px;
+      background: var(--line);
+      border-radius: 2px;
+      transition: background 0.2s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      margin-top: -6px;
+      transition: all 0.2s ease;
+    }
+
+    input[type="range"]::-webkit-slider-thumb:hover {
+      transform: scale(1.1);
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      background: var(--accent);
+      cursor: pointer;
+      border: none;
+    }
+
+    #dpad {
+      width: min(640px, 96vw);
+      margin-top: 12px;
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+    }
+
+    #dpad button {
+      padding: clamp(12px, 4vw, 16px) 0;
+      font-size: clamp(16px, 4.5vw, 18px);
+      touch-action: none;
+      min-height: 50px;
+    }
+
+    .avatar-preview {
+      width: 40px;
+      height: 40px;
+      border: 2px solid var(--line);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(0, 0, 0, 0.3);
+      overflow: hidden;
+    }
+
+    .avatar-preview canvas {
+      width: 100%;
+      height: 100%;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%) translateY(100px);
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px 24px;
+      color: var(--text);
+      font-size: 14px;
+      z-index: 1000;
+      opacity: 0;
+      transition: all 0.4s ease;
+      pointer-events: none;
+      max-width: 90vw;
+      text-align: center;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    .toast.success {
+      border-color: var(--accent);
+    }
+
+    .toast.error {
+      border-color: var(--error);
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    @media (max-width: 420px) {
+      .panel {
+        grid-template-columns: 1fr;
+      }
+
+      #dpad {
+        grid-template-columns: repeat(2, 1fr);
+      }
+
+      .setting-row {
+        flex-wrap: wrap;
+        gap: 6px;
+      }
+
+      .setting-row select,
+      .setting-row input[type="color"] {
+        min-width: 100px;
+        flex: 1;
+      }
+
+      .setting-row .sens-slider {
+        width: 100px;
+      }
+    }
+
+    @media (max-height: 640px) {
+      #stage {
+        max-height: 50vh;
+      }
+    }
+
+    *:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: var(--bg);
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--line);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--muted);
+    }
+
+    #loading {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 14px;
+      z-index: 1;
+      background: #0a0b0d;
+    }
+
+    #loading.hidden {
+      display: none;
+    }
+  </style>
+</head>
+
+<body>
+
+  <h1>Labyrinthe 3D</h1>
+  <p class="sub">Un labyrinthe aléatoire à chaque niveau. Trouve la sortie — repère la lueur verte au loin.</p>
+
+  <div id="stage">
+    <div id="loading">⏳ Chargement du labyrinthe...</div>
+    <canvas id="view" role="img" aria-label="Vue à la première personne du labyrinthe"></canvas>
+    <canvas id="mini" role="img" aria-label="Mini-carte du labyrinthe"></canvas>
+    <button type="button" id="hint" aria-label="Paramètres">⚙</button>
+    <button type="button" id="fullscreenBtn" aria-label="Plein écran">⛶</button>
+    <button type="button" id="pauseBtn" aria-label="Pause">⏸</button>
+    <div id="levelBadge">Niveau 1</div>
+    <div id="stats">Temps 0:00 · Distance 0</div>
+    <div id="winOverlay">
+      <p>🎉 Sortie trouvée !</p>
+      <span id="winStats"></span>
+      <div class="actions win-actions">
+        <button type="button" id="replayBtn">🔄 Rejouer</button>
+        <button type="button" class="primary" id="nextLevelBtn">➡️ Niveau suivant</button>
+      </div>
+    </div>
+    <div id="pauseOverlay">
+      <p>⏸ Pause</p>
+      <div class="actions win-actions">
+        <button type="button" id="openSettingsFromPauseBtn">⚙ Paramètres</button>
+        <button type="button" class="primary" id="resumeBtn">▶ Reprendre</button>
+      </div>
+    </div>
+    <div id="settingsOverlay">
+      <h2>⚙ Paramètres</h2>
+      <div class="setting-row">
+        <label for="viewModeSelect">Point de vue</label>
+        <select id="viewModeSelect">
+          <option value="fps">Première personne</option>
+          <option value="topdown">Vue du dessus</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label for="soundToggle">Sons</label>
+        <label class="switch">
+          <input type="checkbox" id="soundToggle" checked>
+          <span class="switch-track"></span>
+        </label>
+      </div>
+      <div class="setting-row">
+        <label for="minimapToggle">Afficher la mini-carte</label>
+        <label class="switch">
+          <input type="checkbox" id="minimapToggle" checked>
+          <span class="switch-track"></span>
+        </label>
+      </div>
+      <div class="setting-row">
+        <label for="sensSlider">Sensibilité (glisser)</label>
+        <input type="range" id="sensSlider" class="sens-slider" min="1" max="10" value="5">
+      </div>
+      <div class="setting-row">
+        <label for="avatarColor">Couleur avatar</label>
+        <input type="color" id="avatarColor" value="#f0b429">
+      </div>
+      <div class="setting-row">
+        <label for="avatarSize">Taille avatar</label>
+        <input type="range" id="avatarSize" min="0.3" max="1.2" step="0.05" value="0.7">
+      </div>
+      <div class="setting-row">
+        <label for="avatarShape">Forme avatar</label>
+        <select id="avatarShape">
+          <option value="circle">Cercle</option>
+          <option value="square">Carré</option>
+          <option value="triangle">Triangle</option>
+          <option value="star">Étoile</option>
+          <option value="diamond">Diamant</option>
+        </select>
+      </div>
+      <div class="setting-row">
+        <label>Prévisualisation</label>
+        <div class="avatar-preview" id="avatarPreview"></div>
+      </div>
+      <div class="actions settings-actions">
+        <button type="button" class="danger" id="resetProgressBtn">🗑 Réinitialiser</button>
+        <button type="button" class="primary" id="closeSettingsBtn">✓ Fermer</button>
+      </div>
+    </div>
+    <div id="levelMapOverlay">
+      <h2>🗺 Carte des niveaux</h2>
+      <div class="legend">
+        <span><i class="legend-todo"></i> À jouer</span>
+        <span><i class="legend-done"></i> Terminé</span>
+        <span><i class="legend-locked"></i> Verrouillé</span>
+      </div>
+      <div class="grid-levels" id="gridLevels"></div>
+      <div class="actions">
+        <button type="button" class="primary" id="closeLevelMapBtn">✕ Fermer</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast"></div>
+
+  <p id="hintLine">Flèches/WASD ou glisser : se déplacer et tourner</p>
+
+  <div id="dpad">
+    <button type="button" id="btnLeft" aria-label="Tourner à gauche">↺</button>
+    <button type="button" id="btnFwd" aria-label="Avancer">▲</button>
+    <button type="button" id="btnBack" aria-label="Reculer">▼</button>
+    <button type="button" id="btnRight" aria-label="Tourner à droite">↻</button>
+  </div>
+
+  <div class="panel">
+    <div class="field">
+      <label for="levelSlider">Niveau <span id="levelOut">1 / 100</span></label>
+      <input type="range" id="levelSlider" min="1" max="100" value="1">
+    </div>
+    <div class="field">
+      <label for="levelInput">Aller au niveau <span class="error-text" id="levelInputError"></span></label>
+      <input type="number" id="levelInput" min="1" max="100" value="1">
+    </div>
+    <div class="actions">
+      <button type="button" id="prevBtn">◀ Précédent</button>
+      <button type="button" id="newBtn">🔄 Régénérer</button>
+      <button type="button" id="nextBtn">Suivant ▶</button>
+    </div>
+  </div>
+
+  <div class="panel levelmap-row">
+    <button type="button" id="levelMapBtn">🗺 Carte des niveaux</button>
+  </div>
+
+  <script>
+    'use strict';
+
+    // ============================================
+    // CONFIGURATION
+    // ============================================
+    const CONFIG = {
+      TEX_SIZE: 64,
+      MOVE_SPEED: 2.4,
+      ROT_SPEED: 2.0,
+      WALL_TIERS: ['#3c4654', '#5a3a2e', '#2e4a5a', '#4a2e5a'],
+      FOG_TIERS: [
+        [6, 7, 9],
+        [26, 14, 8],
+        [6, 16, 24],
+        [22, 8, 26]
+      ]
+    };
+
+    // ============================================
+    // UTILITAIRES
+    // ============================================
+    const Utils = {
+      rand: (a, b) => a + Math.random() * (b - a),
+      randInt: (a, b) => Math.floor(Utils.rand(a, b + 1)),
+      clamp: (v, min, max) => Math.max(min, Math.min(max, v)),
+      formatTime: (ms) => {
+        const s = Math.floor(ms / 1000);
+        const m = Math.floor(s / 60);
+        return m + ':' + (s % 60).toString().padStart(2, '0');
+      },
+      dist: (x1, y1, x2, y2) => Math.sqrt(Math.pow(x2 - x1, 2) + Math.pow(y2 - y1, 2))
+    };
+
+    // ============================================
+    // STORAGE
+    // ============================================
+    const Storage = {
+      get: (key, def) => {
+        try {
+          const raw = localStorage.getItem('lab3d-' + key);
+          return raw ? JSON.parse(raw) : def;
+        } catch (e) {
+          console.warn('Storage get error:', key, e);
+          return def;
+        }
+      },
+      set: (key, val) => {
+        try {
+          localStorage.setItem('lab3d-' + key, JSON.stringify(val));
+        } catch (e) {
+          console.warn('Storage set error:', key, e);
+        }
+      },
+      remove: (key) => {
+        try {
+          localStorage.removeItem('lab3d-' + key);
+        } catch (e) {
+          console.warn('Storage remove error:', key, e);
+        }
+      }
+    };
+
+    // ============================================
+    // TOAST
+    // ============================================
+    const Toast = {
+      _el: null,
+      _timeout: null,
+      init() {
+        this._el = document.getElementById('toast');
+        if (!this._el) console.warn('Toast element not found');
+      },
+      show(msg, type) {
+        if (!this._el) return;
+        if (this._timeout) clearTimeout(this._timeout);
+        this._el.textContent = msg;
+        this._el.className = 'toast show' + (type ? ' ' + type : '');
+        this._timeout = setTimeout(() => {
+          if (this._el) this._el.classList.remove('show');
+          this._timeout = null;
+        }, 3000);
+      },
+      success: (msg) => Toast.show(msg, 'success'),
+      error: (msg) => Toast.show(msg, 'error')
+    };
+
+    // ============================================
+    // AUDIO MANAGER - CORRIGÉ
+    // ============================================
+    const AudioManager = {
+      _ctx: null,
+      _enabled: true,
+      _initialized: false,
+      _stepToggle: false,
+
+      init() {
+        if (this._initialized) return;
+        this._enabled = Storage.get('settings', {}).sound !== false;
+        this._initialized = true;
+        console.log('🎵 AudioManager initialisé, enabled:', this._enabled);
+      },
+
+      _ensureContext() {
+        if (!this._enabled) return false;
+        if (!this._ctx) {
+          try {
+            this._ctx = new(window.AudioContext || window.webkitAudioContext)();
+          } catch (e) {
+            console.warn('AudioContext non disponible');
+            this._ctx = null;
+            return false;
+          }
+        }
+        if (this._ctx && this._ctx.state === 'suspended') {
+          this._ctx.resume().catch(() => {});
+        }
+        return true;
+      },
+
+      _play(freq, duration, type, volume) {
+        if (!this._ensureContext() || !this._ctx) return;
+        try {
+          const t = this._ctx.currentTime;
+          const osc = this._ctx.createOscillator();
+          const gain = this._ctx.createGain();
+          osc.type = type || 'sine';
+          osc.frequency.setValueAtTime(freq, t);
+          gain.gain.setValueAtTime(0.001, t);
+          gain.gain.exponentialRampToValueAtTime(volume || 0.15, t + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, t + duration + 0.02);
+          osc.connect(gain);
+          gain.connect(this._ctx.destination);
+          osc.start(t);
+          osc.stop(t + duration + 0.03);
+        } catch (e) {
+          // Ignorer les erreurs audio
+        }
+      },
+
+      playBump() {
+        this._play(110, 0.12, 'sine', 0.18);
+      },
+
+      playWin() {
+        if (!this._ensureContext() || !this._ctx) return;
+        const notes = [523.25, 659.25, 783.99, 1046.5];
+        for (let i = 0; i < notes.length; i++) {
+          const delay = i * 0.11;
+          setTimeout(() => {
+            this._play(notes[i], 0.35, 'triangle', 0.15);
+          }, delay * 1000);
+        }
+      },
+
+      playStep() {
+        this._stepToggle = !this._stepToggle;
+        this._play(this._stepToggle ? 95 : 80, 0.06, 'triangle', 0.05);
+      },
+
+      setEnabled(enabled) {
+        this._enabled = enabled;
+        if (!enabled && this._ctx) {
+          this._ctx.suspend().catch(() => {});
+        }
+      }
+    };
+
+    // ============================================
+    // TEXTURE GENERATOR
+    // ============================================
+    const TextureGen = {
+      _cache: {},
+      generate(baseColor) {
+        const key = baseColor;
+        if (this._cache[key]) return this._cache[key];
+
+        const size = CONFIG.TEX_SIZE;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        ctx.fillStyle = baseColor;
+        ctx.fillRect(0, 0, size, size);
+
+        const rows = 8,
+          brickH = size / rows;
+        for (let row = 0; row < rows; row++) {
+          const offset = (row % 2 === 0) ? 0 : size / 6;
+          const y = row * brickH;
+          ctx.fillStyle = 'rgba(0,0,0,0.35)';
+          ctx.fillRect(0, y, size, 1.5);
+          for (let bx = -size; bx < size * 2; bx += size / 3) {
+            ctx.fillRect(bx + offset, y, 1.5, brickH);
+          }
+          ctx.fillStyle = 'rgba(255,255,255,' + Utils.rand(0.01, 0.05).toFixed(3) + ')';
+          ctx.fillRect(0, y + 1.5, size, brickH - 1.5);
+        }
+
+        const imgData = ctx.getImageData(0, 0, size, size);
+        for (let i = 0; i < imgData.data.length; i += 4) {
+          const n = Utils.rand(-10, 10);
+          imgData.data[i] = Utils.clamp(imgData.data[i] + n, 0, 255);
+          imgData.data[i + 1] = Utils.clamp(imgData.data[i + 1] + n, 0, 255);
+          imgData.data[i + 2] = Utils.clamp(imgData.data[i + 2] + n, 0, 255);
+        }
+        ctx.putImageData(imgData, 0, 0);
+
+        this._cache[key] = canvas;
+        return canvas;
+      }
+    };
+
+    // ============================================
+    // MAZE GENERATOR
+    // ============================================
+    const MazeGen = {
+      generate(cellsW, cellsH) {
+        const mapW = cellsW * 2 + 1;
+        const mapH = cellsH * 2 + 1;
+        const grid = Array.from({ length: mapH }, () => new Array(mapW).fill(1));
+
+        const visited = Array.from({ length: cellsH }, () => new Array(cellsW).fill(false));
+        const stack = [
+          [0, 0]
+        ];
+        visited[0][0] = true;
+        grid[1][1] = 0;
+
+        while (stack.length) {
+          const [cx, cy] = stack[stack.length - 1];
+          const dirs = [
+            [0, -1],
+            [0, 1],
+            [-1, 0],
+            [1, 0]
+          ];
+          for (let i = dirs.length - 1; i > 0; i--) {
+            const j = Utils.randInt(0, i);
+            [dirs[i], dirs[j]] = [dirs[j], dirs[i]];
+          }
+          let moved = false;
+          for (const [dx, dy] of dirs) {
+            const nx = cx + dx,
+              ny = cy + dy;
+            if (nx >= 0 && ny >= 0 && nx < cellsW && ny < cellsH && !visited[ny][nx]) {
+              visited[ny][nx] = true;
+              grid[cy * 2 + 1 + dy][cx * 2 + 1 + dx] = 0;
+              grid[ny * 2 + 1][nx * 2 + 1] = 0;
+              stack.push([nx, ny]);
+              moved = true;
+              break;
+            }
+          }
+          if (!moved) stack.pop();
+        }
+
+        const startX = 1,
+          startY = 1;
+        const dist = Array.from({ length: mapH }, () => new Array(mapW).fill(-1));
+        dist[startY][startX] = 0;
+        const queue = [
+          [startX, startY]
+        ];
+        let farX = startX,
+          farY = startY,
+          farD = 0;
+
+        while (queue.length) {
+          const [x, y] = queue.shift();
+          const d = dist[y][x];
+          if (d > farD) { farD = d;
+            farX = x;
+            farY = y; }
+          for (const [dx, dy] of [
+              [0, -1],
+              [0, 1],
+              [-1, 0],
+              [1, 0]
+            ]) {
+            const nx = x + dx,
+              ny = y + dy;
+            if (nx >= 0 && ny >= 0 && nx < mapW && ny < mapH && grid[ny][nx] === 0 && dist[ny][nx] === -1) {
+              dist[ny][nx] = d + 1;
+              queue.push([nx, ny]);
+            }
+          }
+        }
+
+        return { grid, width: mapW, height: mapH, exitX: farX, exitY: farY, startX, startY };
+      }
+    };
+
+    // ============================================
+    // AVATAR RENDERER
+    // ============================================
+    const Avatar = {
+      draw(ctx, x, y, size, color, shape) {
+        const s = size * 12;
+        ctx.save();
+        ctx.translate(x, y);
+
+        // Glow
+        const grad = ctx.createRadialGradient(0, 0, 0, 0, 0, s * 1.5);
+        grad.addColorStop(0, color + '40');
+        grad.addColorStop(1, 'transparent');
+        ctx.fillStyle = grad;
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 1.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 10;
+
+        switch (shape) {
+          case 'circle':
+            ctx.beginPath();
+            ctx.arc(0, 0, s, 0, Math.PI * 2);
+            ctx.fill();
+            break;
+          case 'square':
+            ctx.fillRect(-s, -s, s * 2, s * 2);
+            break;
+          case 'triangle':
+            ctx.beginPath();
+            ctx.moveTo(0, -s * 1.1);
+            ctx.lineTo(-s, s * 0.8);
+            ctx.lineTo(s, s * 0.8);
+            ctx.closePath();
+            ctx.fill();
+            break;
+          case 'star': {
+            const pts = 5;
+            const outer = s,
+              inner = s * 0.4;
+            ctx.beginPath();
+            for (let i = 0; i < pts * 2; i++) {
+              const r = i % 2 === 0 ? outer : inner;
+              const a = (i * Math.PI) / pts - Math.PI / 2;
+              i === 0 ? ctx.moveTo(r * Math.cos(a), r * Math.sin(a)) : ctx.lineTo(r * Math.cos(a), r * Math.sin(a));
+            }
+            ctx.closePath();
+            ctx.fill();
+            break;
+          }
+          case 'diamond':
+            ctx.beginPath();
+            ctx.moveTo(0, -s);
+            ctx.lineTo(s * 0.7, 0);
+            ctx.lineTo(0, s);
+            ctx.lineTo(-s * 0.7, 0);
+            ctx.closePath();
+            ctx.fill();
+            break;
+          default:
+            ctx.beginPath();
+            ctx.arc(0, 0, s, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        ctx.shadowBlur = 0;
+        ctx.restore();
+      }
+    };
+
+    // ============================================
+    // GAME
+    // ============================================
+    const Game = {
+      // État
+      state: {
+        map: [],
+        mapW: 0,
+        mapH: 0,
+        exitX: 0,
+        exitY: 0,
+        posX: 1.5,
+        posY: 1.5,
+        dirX: 1,
+        dirY: 0,
+        planeX: 0,
+        planeY: 0.66,
+        won: false,
+        paused: false,
+        currentLevel: 1,
+        distanceTraveled: 0,
+        startTime: 0,
+        bumpCooldown: 0,
+        stepAccumulator: 0
+      },
+
+      settings: {},
+      keys: {},
+      zBuffer: [],
+      texture: null,
+      lastTime: 0,
+      dragging: false,
+      dragLastX: 0,
+
+      // DOM
+      view: null,
+      vctx: null,
+      mini: null,
+      mctx: null,
+      VW: 0,
+      VH: 0,
+      MW: 0,
+      MH: 0,
+
+      // ==========================================
+      // INIT
+      // ==========================================
+      init() {
+        console.log('🎮 Initialisation du jeu...');
+
+        this.view = document.getElementById('view');
+        this.vctx = this.view.getContext('2d');
+        this.mini = document.getElementById('mini');
+        this.mctx = this.mini.getContext('2d');
+
+        if (!this.view || !this.mini) {
+          console.error('❌ Canvas non trouvés');
+          return;
+        }
+
+        // Settings
+        this.settings = Storage.get('settings', {
+          sound: true,
+          minimap: true,
+          sensitivity: 5,
+          viewMode: 'fps',
+          avatarColor: '#f0b429',
+          avatarSize: 0.7,
+          avatarShape: 'circle'
+        });
+
+        // Audio
+        AudioManager.init();
+
+        // UI
+        this._setupUI();
+        this._setupInput();
+
+        // Dimensions
+        this._resize();
+        window.addEventListener('resize', () => this._resize());
+
+        // Texture par défaut
+        this.texture = TextureGen.generate(CONFIG.WALL_TIERS[0]);
+
+        // Génération du labyrinthe
+        const maxLevel = this._getMaxLevel();
+        this._setLevel(maxLevel);
+
+        // Masquer le chargement
+        document.getElementById('loading').classList.add('hidden');
+
+        Toast.init();
+
+        // Boucle
+        this.lastTime = performance.now();
+        console.log('🚀 Lancement de la boucle');
+        this._loop(performance.now());
+
+        // Activation audio au premier clic
+        const enableAudio = () => {
+          AudioManager._ensureContext();
+          document.removeEventListener('click', enableAudio);
+          document.removeEventListener('touchstart', enableAudio);
+          document.removeEventListener('keydown', enableAudio);
+        };
+        document.addEventListener('click', enableAudio, { once: true });
+        document.addEventListener('touchstart', enableAudio, { once: true });
+        document.addEventListener('keydown', enableAudio, { once: true });
+      },
+
+      // ==========================================
+      // RESIZE - CORRIGÉ
+      // ==========================================
+      _resize() {
+        const dpr = window.devicePixelRatio || 1;
+        const parent = this.view.parentElement;
+
+        // Forcer des dimensions valides
+        const rect = parent.getBoundingClientRect();
+        const width = Math.max(400, Math.floor(rect.width || 640));
+        const height = Math.max(300, Math.floor(rect.height || 400));
+
+        this.VW = Math.floor(width);
+        this.VH = Math.floor(height);
+
+        this.view.width = this.VW * dpr;
+        this.view.height = this.VH * dpr;
+        this.vctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const miniRect = this.mini.getBoundingClientRect();
+        this.MW = Math.max(64, Math.floor(miniRect.width || 120));
+        this.MH = Math.max(64, Math.floor(miniRect.height || 120));
+        this.mini.width = this.MW * dpr;
+        this.mini.height = this.MH * dpr;
+        this.mctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        if (this.VW > 0 && this.VH > 0) {
+          this.zBuffer = new Array(this.VW);
+        }
+
+        console.log('📐 Resize:', this.VW, 'x', this.VH);
+      },
+
+      // ==========================================
+      // UI
+      // ==========================================
+      _setupUI() {
+        // Valeurs initiales
+        document.getElementById('viewModeSelect').value = this.settings.viewMode;
+        document.getElementById('soundToggle').checked = this.settings.sound;
+        document.getElementById('minimapToggle').checked = this.settings.minimap;
+        document.getElementById('sensSlider').value = this.settings.sensitivity;
+        document.getElementById('avatarColor').value = this.settings.avatarColor;
+        document.getElementById('avatarSize').value = this.settings.avatarSize;
+        document.getElementById('avatarShape').value = this.settings.avatarShape;
+
+        // Gestionnaire de changements de paramètres
+        // Pour les <input type="checkbox">, la propriété `.value` vaut toujours "on"
+        // (qu'elles soient cochées ou non) : il faut lire `.checked`, pas `.value`.
+        const onSettingChange = (key, transform) => (e) => {
+          const raw = (e.target.type === 'checkbox') ? e.target.checked : e.target.value;
+          this.settings[key] = transform ? transform(raw) : raw;
+          Storage.set('settings', this.settings);
+          if (key === 'viewMode' || key === 'minimap') this._applyMinimapVisibility();
+          if (key === 'avatarColor' || key === 'avatarSize' || key === 'avatarShape') this._updateAvatarPreview();
+          if (key === 'sound') AudioManager.setEnabled(this.settings.sound);
+        };
+
+        document.getElementById('viewModeSelect').addEventListener('change', onSettingChange('viewMode'));
+        document.getElementById('soundToggle').addEventListener('change', onSettingChange('sound'));
+        document.getElementById('minimapToggle').addEventListener('change', onSettingChange('minimap'));
+        document.getElementById('sensSlider').addEventListener('input', onSettingChange('sensitivity', parseInt));
+        document.getElementById('avatarColor').addEventListener('input', onSettingChange('avatarColor'));
+        document.getElementById('avatarSize').addEventListener('input', onSettingChange('avatarSize', parseFloat));
+        document.getElementById('avatarShape').addEventListener('change', onSettingChange('avatarShape'));
+
+        // Boutons
+        document.getElementById('hint').addEventListener('click', () =>
+          document.getElementById('settingsOverlay').classList.toggle('show'));
+        document.getElementById('closeSettingsBtn').addEventListener('click', () =>
+          document.getElementById('settingsOverlay').classList.remove('show'));
+
+        // Réinitialisation avec confirmation "double-clic" plutôt que window.confirm(),
+        // qui peut être bloqué silencieusement dans certains contextes (iframes, webviews).
+        let resetConfirmPending = false;
+        let resetConfirmTimeout = null;
+        document.getElementById('resetProgressBtn').addEventListener('click', () => {
+          if (!resetConfirmPending) {
+            resetConfirmPending = true;
+            Toast.error('⚠️ Cliquez à nouveau pour confirmer la réinitialisation');
+            resetConfirmTimeout = setTimeout(() => { resetConfirmPending = false; }, 3000);
+            return;
+          }
+          clearTimeout(resetConfirmTimeout);
+          resetConfirmPending = false;
+          Storage.set('maxLevel', 1);
+          for (let i = 1; i <= 100; i++) Storage.remove('best-' + i);
+          Toast.success('Progression réinitialisée');
+          this._setLevel(1);
+          document.getElementById('settingsOverlay').classList.remove('show');
+        });
+
+        document.getElementById('levelSlider').addEventListener('input', (e) => {
+          const val = parseInt(e.target.value);
+          if (!isNaN(val) && val >= 1) this._setLevel(val);
+        });
+
+        document.getElementById('levelInput').addEventListener('change', (e) => {
+          const val = parseInt(e.target.value);
+          const err = document.getElementById('levelInputError');
+          if (isNaN(val) || val < 1) {
+            err.textContent = '❌ Minimum 1';
+            e.target.value = this.state.currentLevel;
+            return;
+          }
+          const max = Math.min(100, this._getMaxLevel());
+          if (val > max) {
+            err.textContent = '🔒 Verrouillé (max ' + max + ')';
+            e.target.value = this.state.currentLevel;
+            return;
+          }
+          err.textContent = '';
+          this._setLevel(val);
+        });
+
+        document.getElementById('prevBtn').addEventListener('click', () => this._setLevel(this.state.currentLevel - 1));
+        document.getElementById('nextBtn').addEventListener('click', () => this._setLevel(this.state.currentLevel + 1));
+        document.getElementById('newBtn').addEventListener('click', () => {
+          this._regenerate();
+          Toast.success('Labyrinthe régénéré');
+          // Mettre à jour la texture
+          const tier = this._getTier(this.state.currentLevel);
+          this.texture = TextureGen.generate(CONFIG.WALL_TIERS[tier]);
+        });
+
+        document.getElementById('replayBtn').addEventListener('click', () => {
+          this._regenerate();
+          const tier = this._getTier(this.state.currentLevel);
+          this.texture = TextureGen.generate(CONFIG.WALL_TIERS[tier]);
+        });
+        document.getElementById('nextLevelBtn').addEventListener('click', () => {
+          if (this.state.currentLevel < 100) this._setLevel(this.state.currentLevel + 1);
+        });
+
+        document.getElementById('pauseBtn').addEventListener('click', () => {
+          if (!this.state.won) this._togglePause();
+        });
+        document.getElementById('resumeBtn').addEventListener('click', () => this._togglePause());
+        document.getElementById('openSettingsFromPauseBtn').addEventListener('click', () =>
+          document.getElementById('settingsOverlay').classList.add('show'));
+
+        document.getElementById('levelMapBtn').addEventListener('click', () => {
+          this._buildLevelMap();
+          document.getElementById('levelMapOverlay').classList.add('show');
+        });
+        document.getElementById('closeLevelMapBtn').addEventListener('click', () =>
+          document.getElementById('levelMapOverlay').classList.remove('show'));
+
+        document.getElementById('fullscreenBtn').addEventListener('click', () => {
+          const stage = document.getElementById('stage');
+          if (!document.fullscreenElement) {
+            stage.requestFullscreen().catch(() => {});
+          } else {
+            document.exitFullscreen();
+          }
+        });
+
+        document.addEventListener('keydown', (e) => {
+          if (e.key === 'Escape' && !this.state.won) this._togglePause();
+          if (e.key === 'f' || e.key === 'F') document.getElementById('fullscreenBtn').click();
+          if (e.key === 'r' || e.key === 'R') {
+            this._regenerate();
+            Toast.success('Labyrinthe régénéré');
+          }
+        });
+
+        this._updateAvatarPreview();
+        this._applyMinimapVisibility();
+        this._refreshLevelBounds();
+        this._updateLevelBadge();
+      },
+
+      // ==========================================
+      // INPUT
+      // ==========================================
+      _setupInput() {
+        document.addEventListener('keydown', (e) => { this.keys[e.key.toLowerCase()] = true; });
+        document.addEventListener('keyup', (e) => { this.keys[e.key.toLowerCase()] = false; });
+
+        const view = this.view;
+
+        view.addEventListener('mousedown', (e) => {
+          this.dragging = true;
+          this.dragLastX = e.clientX;
+        });
+
+        window.addEventListener('mousemove', (e) => {
+          if (!this.dragging || this.state.paused || this.state.won) return;
+          const dx = e.clientX - this.dragLastX;
+          this.dragLastX = e.clientX;
+          const sens = (this.settings.sensitivity / 5) * 0.0045;
+          this._rotate(-dx * sens);
+        });
+
+        window.addEventListener('mouseup', () => { this.dragging = false; });
+
+        view.addEventListener('touchstart', (e) => {
+          if (e.touches.length === 1) {
+            this.dragging = true;
+            this.dragLastX = e.touches[0].clientX;
+          }
+        }, { passive: true });
+
+        view.addEventListener('touchmove', (e) => {
+          if (e.touches.length === 1 && !this.state.paused && !this.state.won) {
+            const dx = e.touches[0].clientX - this.dragLastX;
+            this.dragLastX = e.touches[0].clientX;
+            const sens = (this.settings.sensitivity / 5) * 0.0045;
+            this._rotate(-dx * sens);
+          }
+        }, { passive: true });
+
+        view.addEventListener('touchend', () => { this.dragging = false; });
+
+        // D-pad
+        ['btnFwd', 'btnBack', 'btnLeft', 'btnRight'].forEach((id, i) => {
+          const keys = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
+          const el = document.getElementById(id);
+          const setKey = (v) => { this.keys[keys[i]] = v; };
+          const handlers = {
+            mousedown: (e) => { e.preventDefault();
+              setKey(true); },
+            mouseup: (e) => { e.preventDefault();
+              setKey(false); },
+            mouseleave: (e) => { e.preventDefault();
+              setKey(false); },
+            touchstart: (e) => { e.preventDefault();
+              setKey(true); },
+            touchend: (e) => { e.preventDefault();
+              setKey(false); },
+            touchcancel: (e) => { e.preventDefault();
+              setKey(false); }
+          };
+          Object.entries(handlers).forEach(([evt, fn]) => el.addEventListener(evt, fn));
+        });
+      },
+
+      // ==========================================
+      // LEVEL MANAGEMENT
+      // ==========================================
+      _levelToCells(level) {
+        const t = (Utils.clamp(level, 1, 100) - 1) / 99;
+        return Math.round(5 + t * 20);
+      },
+
+      _getMaxLevel() {
+        return Utils.clamp(Storage.get('maxLevel', 1), 1, 100);
+      },
+
+      _setMaxLevel(level) {
+        const cur = this._getMaxLevel();
+        if (level > cur) Storage.set('maxLevel', Math.min(100, level));
+      },
+
+      _getBest(level) {
+        return Storage.get('best-' + level, null);
+      },
+
+      _setBest(level, time, dist) {
+        const cur = this._getBest(level);
+        if (!cur || time < cur.timeMs) {
+          Storage.set('best-' + level, { timeMs: time, distance: Math.round(dist) });
+          return true;
+        }
+        return false;
+      },
+
+      _setLevel(level) {
+        const max = this._getMaxLevel();
+        const newLevel = Utils.clamp(level, 1, max);
+        if (newLevel !== level) {
+          Toast.error('Niveau ' + level + ' verrouillé');
+          return;
+        }
+
+        this.state.currentLevel = newLevel;
+        this.state.won = false;
+        this.state.distanceTraveled = 0;
+        this.state.startTime = performance.now();
+        this.state.stepAccumulator = 0;
+        document.getElementById('winOverlay').classList.remove('show');
+
+        this._regenerate();
+        this._updateLevelBadge();
+        this._refreshLevelBounds();
+        this._updateStats();
+
+        const tier = this._getTier(newLevel);
+        this.texture = TextureGen.generate(CONFIG.WALL_TIERS[tier]);
+      },
+
+      _regenerate() {
+        const cells = this._levelToCells(this.state.currentLevel);
+        const result = MazeGen.generate(cells, cells);
+
+        this.state.map = result.grid;
+        this.state.mapW = result.width;
+        this.state.mapH = result.height;
+        this.state.exitX = result.exitX;
+        this.state.exitY = result.exitY;
+        this.state.posX = result.startX + 0.5;
+        this.state.posY = result.startY + 0.5;
+        this.state.dirX = 1;
+        this.state.dirY = 0;
+        this.state.planeX = 0;
+        this.state.planeY = 0.66;
+        this.state.won = false;
+        this.state.distanceTraveled = 0;
+        this.state.startTime = performance.now();
+        this.state.stepAccumulator = 0;
+        this.state.bumpCooldown = 0;
+        document.getElementById('winOverlay').classList.remove('show');
+      },
+
+      _getTier(level) {
+        return Math.min(3, Math.floor((level - 1) / 25));
+      },
+
+      _updateLevelBadge() {
+        document.getElementById('levelBadge').textContent = 'Niveau ' + this.state.currentLevel;
+      },
+
+      _refreshLevelBounds() {
+        const max = this._getMaxLevel();
+        document.getElementById('levelSlider').max = max;
+        document.getElementById('levelInput').max = max;
+        document.getElementById('levelOut').textContent =
+          this.state.currentLevel + ' / 100 (débloqué : ' + max + ')';
+        document.getElementById('nextBtn').disabled = this.state.currentLevel >= max;
+        document.getElementById('prevBtn').disabled = this.state.currentLevel <= 1;
+      },
+
+      _updateStats() {
+        const best = this._getBest(this.state.currentLevel);
+        let text = 'Temps ' + Utils.formatTime(performance.now() - this.state.startTime) +
+          ' · Distance ' + Math.round(this.state.distanceTraveled);
+        if (best) text += ' · Record ' + Utils.formatTime(best.timeMs);
+        document.getElementById('stats').textContent = text;
+      },
+
+      _updateAvatarPreview() {
+        const preview = document.getElementById('avatarPreview');
+        if (!preview) return;
+        preview.innerHTML = '';
+        const canvas = document.createElement('canvas');
+        canvas.width = 40;
+        canvas.height = 40;
+        const ctx = canvas.getContext('2d');
+        Avatar.draw(ctx, 20, 20, 1.2, this.settings.avatarColor, this.settings.avatarShape);
+        preview.appendChild(canvas);
+      },
+
+      _applyMinimapVisibility() {
+        const show = this.settings.viewMode === 'fps' && this.settings.minimap;
+        this.mini.style.display = show ? 'block' : 'none';
+      },
+
+      _togglePause() {
+        this.state.paused = !this.state.paused;
+        if (this.state.paused) {
+          this.state.pauseStart = performance.now();
+          document.getElementById('pauseOverlay').classList.add('show');
+        } else {
+          this.state.startTime += performance.now() - this.state.pauseStart;
+          document.getElementById('pauseOverlay').classList.remove('show');
+        }
+      },
+
+      _buildLevelMap() {
+        const grid = document.getElementById('gridLevels');
+        grid.innerHTML = '';
+        const max = this._getMaxLevel();
+        for (let i = 1; i <= 100; i++) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.textContent = i;
+          const locked = i > max;
+          btn.disabled = locked;
+          if (!locked && this._getBest(i)) btn.classList.add('completed');
+          if (i === this.state.currentLevel) btn.classList.add('current');
+          if (!locked) {
+            btn.addEventListener('click', () => {
+              this._setLevel(i);
+              document.getElementById('levelMapOverlay').classList.remove('show');
+            });
+          }
+          grid.appendChild(btn);
+        }
+      },
+
+      // ==========================================
+      // ROTATION
+      // ==========================================
+      _rotate(angle) {
+        const s = this.state;
+        const oldDirX = s.dirX;
+        s.dirX = s.dirX * Math.cos(angle) - s.dirY * Math.sin(angle);
+        s.dirY = oldDirX * Math.sin(angle) + s.dirY * Math.cos(angle);
+        const oldPlaneX = s.planeX;
+        s.planeX = s.planeX * Math.cos(angle) - s.planeY * Math.sin(angle);
+        s.planeY = oldPlaneX * Math.sin(angle) + s.planeY * Math.cos(angle);
+      },
+
+      // ==========================================
+      // UPDATE - CORRIGÉ AVEC AUDIO
+      // ==========================================
+      _update(dt) {
+        const s = this.state;
+        if (s.won || s.paused) return;
+
+        const moveSpeed = CONFIG.MOVE_SPEED * dt;
+        const rotSpeed = CONFIG.ROT_SPEED * dt;
+
+        if (this.keys['arrowleft'] || this.keys['a']) this._rotate(rotSpeed);
+        if (this.keys['arrowright'] || this.keys['d']) this._rotate(-rotSpeed);
+
+        let moveDir = 0;
+        if (this.keys['arrowup'] || this.keys['w']) moveDir = 1;
+        if (this.keys['arrowdown'] || this.keys['s']) moveDir = -1;
+
+        s.bumpCooldown = Math.max(0, s.bumpCooldown - dt);
+
+        if (moveDir !== 0) {
+          const radius = 0.2;
+          const nx = s.posX + s.dirX * moveSpeed * moveDir;
+          const ny = s.posY + s.dirY * moveSpeed * moveDir;
+          let blocked = false;
+          let moved = 0;
+
+          if (!this._isWall(nx + (s.dirX * moveDir > 0 ? radius : -radius), s.posY)) {
+            moved += Math.abs(nx - s.posX);
+            s.distanceTraveled += Math.abs(nx - s.posX);
+            s.posX = nx;
+          } else blocked = true;
+
+          if (!this._isWall(s.posX, ny + (s.dirY * moveDir > 0 ? radius : -radius))) {
+            moved += Math.abs(ny - s.posY);
+            s.distanceTraveled += Math.abs(ny - s.posY);
+            s.posY = ny;
+          } else blocked = true;
+
+          s.stepAccumulator += moved;
+          if (s.stepAccumulator > 0.85) {
+            AudioManager.playStep();
+            s.stepAccumulator = 0;
+          }
+
+          if (blocked && s.bumpCooldown <= 0) {
+            AudioManager.playBump();
+            if (navigator.vibrate) navigator.vibrate(40);
+            s.bumpCooldown = 0.35;
+          }
+        }
+
+        // Victoire
+        if (Utils.dist(s.posX, s.posY, s.exitX + 0.5, s.exitY + 0.5) < 0.5) {
+          s.won = true;
+          AudioManager.playWin();
+
+          const finalTime = performance.now() - s.startTime;
+          const finalDist = Math.round(s.distanceTraveled);
+          const isNewBest = this._setBest(s.currentLevel, finalTime, finalDist);
+          this._setMaxLevel(s.currentLevel + 1);
+          this._refreshLevelBounds();
+
+          const best = this._getBest(s.currentLevel);
+          let text = 'Temps ' + Utils.formatTime(finalTime) + ' · Distance ' + finalDist;
+          if (best) {
+            text += ' — Meilleur : ' + Utils.formatTime(best.timeMs);
+            if (isNewBest) text += ' (🏆 nouveau record !)';
+          }
+          document.getElementById('winStats').textContent = text;
+          document.getElementById('nextLevelBtn').disabled = s.currentLevel >= 100;
+          document.getElementById('winOverlay').classList.add('show');
+          Toast.success('🎉 Sortie trouvée !');
+        }
+
+        this._updateStats();
+      },
+
+      _isWall(x, y) {
+        const mx = Math.floor(x);
+        const my = Math.floor(y);
+        const s = this.state;
+        if (mx < 0 || my < 0 || mx >= s.mapW || my >= s.mapH) return true;
+        return s.map[my][mx] === 1;
+      },
+
+      // ==========================================
+      // RENDER
+      // ==========================================
+      _renderView(time) {
+        const ctx = this.vctx;
+        const W = this.VW,
+          H = this.VH;
+        const s = this.state;
+
+        if (W === 0 || H === 0 || !s.map || s.map.length === 0) {
+          ctx.fillStyle = '#0a0b0d';
+          ctx.fillRect(0, 0, W || 640, H || 400);
+          ctx.fillStyle = '#7d8493';
+          ctx.font = '16px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText('⏳ Génération du labyrinthe...', (W || 640) / 2, (H || 400) / 2);
+          return;
+        }
+
+        ctx.fillStyle = '#15181d';
+        ctx.fillRect(0, 0, W, H / 2);
+        ctx.fillStyle = '#0c0d10';
+        ctx.fillRect(0, H / 2, W, H / 2);
+
+        if (this.zBuffer.length !== W) this.zBuffer = new Array(W);
+
+        for (let x = 0; x < W; x++) {
+          const camX = 2 * x / W - 1;
+          const rayX = s.dirX + s.planeX * camX;
+          const rayY = s.dirY + s.planeY * camX;
+
+          let mapX = Math.floor(s.posX);
+          let mapY = Math.floor(s.posY);
+          const dX = rayX === 0 ? 1e30 : Math.abs(1 / rayX);
+          const dY = rayY === 0 ? 1e30 : Math.abs(1 / rayY);
+
+          let stepX, stepY, sDistX, sDistY;
+          if (rayX < 0) { stepX = -1;
+            sDistX = (s.posX - mapX) * dX; } else { stepX = 1;
+            sDistX = (mapX + 1 - s.posX) * dX; }
+          if (rayY < 0) { stepY = -1;
+            sDistY = (s.posY - mapY) * dY; } else { stepY = 1;
+            sDistY = (mapY + 1 - s.posY) * dY; }
+
+          let hit = 0,
+            side = 0,
+            iter = 0;
+          while (hit === 0 && iter < 64) {
+            if (sDistX < sDistY) { sDistX += dX;
+              mapX += stepX;
+              side = 0; } else { sDistY += dY;
+              mapY += stepY;
+              side = 1; }
+            if (mapX < 0 || mapY < 0 || mapX >= s.mapW || mapY >= s.mapH || s.map[mapY][mapX] === 1) hit = 1;
+            iter++;
+          }
+
+          const perpDist = side === 0 ?
+            (mapX - s.posX + (1 - stepX) / 2) / (rayX || 1e-6) :
+            (mapY - s.posY + (1 - stepY) / 2) / (rayY || 1e-6);
+
+          this.zBuffer[x] = perpDist;
+
+          const lineH = Math.floor(H / Math.max(perpDist, 0.0001));
+          const drawStart = Math.max(0, Math.floor(-lineH / 2 + H / 2));
+          const drawEnd = Math.min(H - 1, Math.floor(lineH / 2 + H / 2));
+
+          let wallX = side === 0 ? s.posY + perpDist * rayY : s.posX + perpDist * rayX;
+          wallX -= Math.floor(wallX);
+          let texX = Math.floor(wallX * CONFIG.TEX_SIZE);
+          if (side === 0 && rayX > 0) texX = CONFIG.TEX_SIZE - texX - 1;
+          if (side === 1 && rayY < 0) texX = CONFIG.TEX_SIZE - texX - 1;
+          texX = Utils.clamp(texX, 0, CONFIG.TEX_SIZE - 1);
+
+          const tex = this.texture || TextureGen.generate(CONFIG.WALL_TIERS[0]);
+          ctx.drawImage(tex, texX, 0, 1, CONFIG.TEX_SIZE, x, drawStart, 1, drawEnd - drawStart + 1);
+
+          const fog = Math.max(0, 1 - perpDist / 12);
+          const sideDark = side === 1 ? 0.35 : 0;
+          const alpha = Math.min(0.92, sideDark + (1 - fog) * 0.92);
+          const tier = this._getTier(s.currentLevel);
+          const [fr, fg, fb] = CONFIG.FOG_TIERS[tier];
+          ctx.fillStyle = 'rgba(' + fr + ',' + fg + ',' + fb + ',' + alpha.toFixed(3) + ')';
+          ctx.fillRect(x, drawStart, 1, drawEnd - drawStart + 1);
+        }
+
+        // Sprite de sortie
+        const sx = s.exitX + 0.5 - s.posX;
+        const sy = s.exitY + 0.5 - s.posY;
+        const invDet = 1.0 / (s.planeX * s.dirY - s.dirX * s.planeY);
+        const tX = invDet * (s.dirY * sx - s.dirX * sy);
+        const tY = invDet * (-s.planeY * sx + s.planeX * sy);
+
+        if (tY > 0.15) {
+          const screenX = Math.floor((W / 2) * (1 + tX / tY));
+          const height = Math.abs(Math.floor(H / tY));
+          const startY = Math.max(0, Math.floor(-height / 2 + H / 2));
+          const endY = Math.min(H - 1, Math.floor(height / 2 + H / 2));
+          const width = height;
+          const startX = Math.max(0, Math.floor(-width / 2 + screenX));
+          const endX = Math.min(W - 1, Math.floor(width / 2 + screenX));
+
+          const pulse = 0.6 + 0.4 * Math.sin(time / 180);
+
+          for (let px = startX; px <= endX; px++) {
+            if (px < 0 || px >= W) continue;
+            if (tY >= this.zBuffer[px]) continue;
+            const t = Math.abs((px - screenX) / (width / 2));
+            const alpha = Math.max(0, (1 - t)) * pulse * Math.max(0, 1 - tY / 14);
+            if (alpha <= 0) continue;
+            ctx.fillStyle = 'rgba(74,222,128,' + alpha.toFixed(3) + ')';
+            ctx.fillRect(px, startY, 1, endY - startY + 1);
+          }
+        }
+      },
+
+      _renderTopDown() {
+        const ctx = this.vctx;
+        const W = this.VW,
+          H = this.VH;
+        const s = this.state;
+
+        if (W === 0 || H === 0 || !s.map || s.map.length === 0) return;
+
+        ctx.fillStyle = '#0c0d10';
+        ctx.fillRect(0, 0, W, H);
+
+        const cell = Math.min(W, H) / Math.max(s.mapW, s.mapH) * 0.94;
+        const ox = (W - s.mapW * cell) / 2;
+        const oy = (H - s.mapH * cell) / 2;
+
+        for (let y = 0; y < s.mapH; y++) {
+          for (let x = 0; x < s.mapW; x++) {
+            if (s.map[y][x] === 1) {
+              ctx.fillStyle = CONFIG.WALL_TIERS[this._getTier(s.currentLevel)];
+              ctx.fillRect(ox + x * cell, oy + y * cell, cell + 0.5, cell + 0.5);
+            }
+          }
+        }
+
+        const pulse = 0.6 + 0.4 * Math.sin(performance.now() / 180);
+        ctx.fillStyle = 'rgba(74,222,128,' + pulse.toFixed(2) + ')';
+        ctx.beginPath();
+        ctx.arc(ox + (s.exitX + 0.5) * cell, oy + (s.exitY + 0.5) * cell, cell * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        const px = ox + s.posX * cell;
+        const py = oy + s.posY * cell;
+        const size = this.settings.avatarSize * cell * 0.6;
+        Avatar.draw(ctx, px, py, size / 12, this.settings.avatarColor, this.settings.avatarShape);
+
+        ctx.strokeStyle = 'rgba(240,180,41,0.2)';
+        ctx.lineWidth = cell * 0.3;
+        ctx.beginPath();
+        ctx.moveTo(px, py);
+        ctx.lineTo(px + s.dirX * cell * 3, py + s.dirY * cell * 3);
+        ctx.stroke();
+      },
+
+      _renderMini() {
+        const ctx = this.mctx;
+        const W = this.MW,
+          H = this.MH;
+        const s = this.state;
+
+        if (W === 0 || H === 0 || !s.map || s.map.length === 0) return;
+
+        ctx.clearRect(0, 0, W, H);
+        const cell = Math.min(W, H) / Math.max(s.mapW, s.mapH);
+
+        for (let y = 0; y < s.mapH; y++) {
+          for (let x = 0; x < s.mapW; x++) {
+            if (s.map[y][x] === 1) {
+              ctx.fillStyle = 'rgba(217,220,226,0.5)';
+              ctx.fillRect(x * cell, y * cell, cell, cell);
+            }
+          }
+        }
+
+        ctx.fillStyle = '#4ade80';
+        ctx.beginPath();
+        ctx.arc(s.exitX * cell + cell / 2, s.exitY * cell + cell / 2, Math.max(cell * 0.6, 2), 0, Math.PI * 2);
+        ctx.fill();
+
+        const size = this.settings.avatarSize * cell * 0.6;
+        Avatar.draw(ctx, s.posX * cell, s.posY * cell, size / 12,
+          this.settings.avatarColor, this.settings.avatarShape);
+
+        ctx.strokeStyle = 'rgba(240,180,41,0.2)';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(s.posX * cell, s.posY * cell);
+        ctx.lineTo((s.posX + s.dirX * 1.5) * cell, (s.posY + s.dirY * 1.5) * cell);
+        ctx.stroke();
+      },
+
+      // ==========================================
+      // LOOP
+      // ==========================================
+      _loop(now) {
+        const dt = Math.min(0.05, (now - this.lastTime) / 1000);
+        this.lastTime = now;
+
+        this._update(dt);
+
+        if (this.settings.viewMode === 'topdown') {
+          this._renderTopDown();
+        } else {
+          this._renderView(now);
+        }
+        this._renderMini();
+
+        requestAnimationFrame((t) => this._loop(t));
+      }
+    };
+
+    // ============================================
+    // DEMARRAGE
+    // ============================================
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('📄 DOM chargé');
+      Game.init();
+    });
+  </script>
+
+</body>
+
+</html>
