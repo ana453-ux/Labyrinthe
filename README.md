@@ -24,7 +24,7 @@ Ouvrez simplement `labyrinthe3d.html` dans un navigateur récent (Chrome, Firefo
 ## Contrôles
 
 | Action | Clavier | Souris/Tactile |
-| --- | --- | --- |
+|---|---|---|
 | Avancer / reculer | ↑ / ↓ ou W / S | Pavé directionnel |
 | Tourner | ← / → ou A / D | Glisser latéralement dans la vue, ou pavé directionnel |
 | Pause | Échap | Bouton ⏸ |
@@ -44,6 +44,19 @@ Le fichier est organisé en modules autonomes au sein d'une seule balise `<scrip
 - `MazeGen` — génération de labyrinthe (recursive backtracker) + calcul de la sortie par BFS.
 - `Avatar` — dessine l'avatar du joueur (cercle, carré, triangle, étoile, diamant).
 - `Game` — objet principal : état du jeu, boucle de rendu, entrées, gestion des niveaux et interface.
+
+## Compatibilité PC et mobile
+
+Le jeu est pensé pour fonctionner aussi bien à la souris/clavier sur PC qu'au tactile sur smartphone/tablette, avec les optimisations suivantes :
+
+- **Entrées unifiées via Pointer Events.** Le glissement pour tourner la caméra et les boutons du pavé directionnel utilisent une seule API (`pointerdown`/`pointermove`/`pointerup`) au lieu de gestionnaires séparés souris/tactile. Cela évite les doubles déclenchements sur les écrans tactiles hybrides (PC portables tactiles) et, grâce à la capture de pointeur (`setPointerCapture`), le glissement continue d'être suivi même si le doigt ou le curseur sort du canvas — un problème classique avec les anciens gestionnaires `touchmove`/`mousemove`.
+- **Zoom accidentel désactivé.** La balise viewport bloque le pincement et le double-tap-zoom, qui perturberaient sans cela le contrôle à la glisse sur mobile. Les contrôles utilisent aussi `touch-action` (`none` sur le canvas et le pavé directionnel, `manipulation` ailleurs) pour éliminer le délai de tap et les gestes indésirables du navigateur.
+- **Redimensionnement robuste.** En plus de l'événement `resize`, le jeu écoute `orientationchange` (avec un second recalcul différé, nécessaire car les dimensions ne sont pas toujours stables immédiatement après une rotation d'écran) et `visualViewport.resize` (pour suivre l'apparition/disparition de la barre d'adresse mobile).
+- **Hauteur d'écran mobile fiable.** Utilisation de `100dvh` (avec repli sur `100vh`) pour éviter les sauts de mise en page liés à la barre d'adresse des navigateurs mobiles, et `overscroll-behavior: none` pour supprimer l'effet de rebond (rubber-band) au défilement sur iOS.
+- **Mode paysage mobile optimisé.** Sur les écrans bas et larges (téléphone en paysage), une règle CSS dédiée agrandit la zone de jeu et masque le titre/sous-titre pour maximiser l'espace utile.
+- **Prise en charge des encoches (safe-area).** Les marges du body s'adaptent via `env(safe-area-inset-*)` pour ne pas être masquées par l'encoche ou la barre de gestes d'un téléphone en plein écran.
+- **Plein écran multi-navigateurs.** Prise en charge de l'API standard et de son équivalent préfixé `webkit` (Safari), avec masquage automatique du bouton si aucune des deux n'est disponible (au lieu d'un bouton inopérant), et tentative de verrouillage en orientation paysage lors du passage en plein écran sur mobile.
+- **Pause automatique en arrière-plan.** Le jeu se met en pause tout seul si l'onglet ou l'application passe en arrière-plan (`visibilitychange`), pratique sur mobile lors d'un changement d'application ou d'un appel entrant.
 
 ## Corrections apportées
 
