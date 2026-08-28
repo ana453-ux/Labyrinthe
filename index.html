@@ -2,8 +2,8 @@
 <html lang="fr">
 
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>Labyrinthe 3D</title>
   <style>
     /* ===== STYLES GARDEZ LES MÊMES ===== */
@@ -30,6 +30,9 @@
       background: var(--bg);
       color: var(--text);
       font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+      overscroll-behavior: none;
+      -webkit-text-size-adjust: 100%;
+      text-size-adjust: 100%;
     }
 
     body {
@@ -37,8 +40,16 @@
       flex-direction: column;
       align-items: center;
       padding: 10px;
+      padding-top: max(10px, env(safe-area-inset-top));
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
+      padding-left: max(10px, env(safe-area-inset-left));
+      padding-right: max(10px, env(safe-area-inset-right));
       min-height: 100vh;
+      min-height: 100dvh;
       user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: manipulation;
     }
 
     h1 {
@@ -307,6 +318,7 @@
       cursor: pointer;
       transition: all 0.2s ease;
       min-height: 40px;
+      touch-action: manipulation;
     }
 
     button:hover:not(:disabled) {
@@ -530,6 +542,7 @@
       font-size: 13px;
       width: 100%;
       transition: border-color 0.2s ease;
+      touch-action: manipulation;
     }
 
     select:focus,
@@ -677,6 +690,23 @@
       }
     }
 
+    /* Mobile en paysage : très peu de hauteur disponible, on maximise la
+       zone de jeu en masquant les éléments non essentiels. */
+    @media (max-height: 480px) and (orientation: landscape) {
+      #stage {
+        max-height: 82vh;
+      }
+      h1,
+      p.sub,
+      #hintLine {
+        display: none;
+      }
+      body {
+        padding-top: max(6px, env(safe-area-inset-top));
+        padding-bottom: max(6px, env(safe-area-inset-bottom));
+      }
+    }
+
     *:focus-visible {
       outline: 2px solid var(--accent);
       outline-offset: 2px;
@@ -793,7 +823,7 @@
         </select>
       </div>
       <div class="setting-row">
-        <label>Prévisualisation</label>
+        <span>Prévisualisation</span>
         <div class="avatar-preview" id="avatarPreview"></div>
       </div>
       <div class="actions settings-actions">
@@ -1294,6 +1324,18 @@
         // Dimensions
         this._resize();
         window.addEventListener('resize', () => this._resize());
+        // Sur mobile, 'resize' peut se déclencher avant que les dimensions ne
+        // soient stabilisées après une rotation d'écran : on force un second
+        // recalcul un peu plus tard pour être sûr.
+        window.addEventListener('orientationchange', () => {
+          this._resize();
+          setTimeout(() => this._resize(), 300);
+        });
+        // La barre d'adresse mobile qui apparaît/disparaît modifie la zone
+        // visible sans toujours déclencher 'resize' : visualViewport le capte.
+        if (window.visualViewport) {
+          window.visualViewport.addEventListener('resize', () => this._resize());
+        }
 
         // Texture par défaut
         this.texture = TextureGen.generate(CONFIG.WALL_TIERS[0]);
@@ -1472,14 +1514,35 @@
         document.getElementById('closeLevelMapBtn').addEventListener('click', () =>
           document.getElementById('levelMapOverlay').classList.remove('show'));
 
-        document.getElementById('fullscreenBtn').addEventListener('click', () => {
-          const stage = document.getElementById('stage');
-          if (!document.fullscreenElement) {
-            stage.requestFullscreen().catch(() => {});
+        {
+          const fsBtn = document.getElementById('fullscreenBtn');
+          const fsSupported = !!(document.fullscreenEnabled || document.webkitFullscreenEnabled);
+          if (!fsSupported) {
+            // API plein écran indisponible (ex. anciens iOS Safari) : on masque
+            // le bouton plutôt que de laisser un contrôle qui ne ferait rien.
+            fsBtn.style.display = 'none';
           } else {
-            document.exitFullscreen();
+            fsBtn.addEventListener('click', () => {
+              const stage = document.getElementById('stage');
+              const fsElement = document.fullscreenElement || document.webkitFullscreenElement;
+              if (!fsElement) {
+                const request = stage.requestFullscreen || stage.webkitRequestFullscreen;
+                if (request) {
+                  Promise.resolve(request.call(stage)).then(() => {
+                    // Meilleur confort de jeu en plein écran sur mobile (échoue
+                    // silencieusement si non supporté, ex. iOS/desktop).
+                    if (screen.orientation && screen.orientation.lock) {
+                      screen.orientation.lock('landscape').catch(() => {});
+                    }
+                  }).catch(() => {});
+                }
+              } else {
+                const exit = document.exitFullscreen || document.webkitExitFullscreen;
+                if (exit) exit.call(document);
+              }
+            });
           }
-        });
+        }
 
         document.addEventListener('keydown', (e) => {
           if (e.key === 'Escape' && !this.state.won) this._togglePause();
@@ -1487,6 +1550,14 @@
           if (e.key === 'r' || e.key === 'R') {
             this._regenerate();
             Toast.success('Labyrinthe régénéré');
+          }
+        });
+
+        // Pause automatique quand l'app/onglet passe en arrière-plan
+        // (changement d'app sur mobile, changement d'onglet sur PC).
+        document.addEventListener('visibilitychange', () => {
+          if (document.hidden && !this.state.won && !this.state.paused) {
+            this._togglePause();
           }
         });
 
@@ -1505,59 +1576,53 @@
 
         const view = this.view;
 
-        view.addEventListener('mousedown', (e) => {
+        // Pointer Events : un seul code pour souris, tactile et stylet.
+        // Évite les doubles déclenchements sur écrans tactiles hybrides
+        // (PC portable tactile) et conserve le glissement même si le
+        // doigt/curseur quitte le canvas, grâce à setPointerCapture.
+        this.activePointerId = null;
+
+        view.addEventListener('pointerdown', (e) => {
+          if (this.activePointerId !== null) return; // ignore un 2e doigt
+          this.activePointerId = e.pointerId;
           this.dragging = true;
           this.dragLastX = e.clientX;
+          try { view.setPointerCapture(e.pointerId); } catch (err) {}
         });
 
-        window.addEventListener('mousemove', (e) => {
-          if (!this.dragging || this.state.paused || this.state.won) return;
+        view.addEventListener('pointermove', (e) => {
+          if (!this.dragging || e.pointerId !== this.activePointerId) return;
+          if (this.state.paused || this.state.won) return;
           const dx = e.clientX - this.dragLastX;
           this.dragLastX = e.clientX;
           const sens = (this.settings.sensitivity / 5) * 0.0045;
           this._rotate(-dx * sens);
         });
 
-        window.addEventListener('mouseup', () => { this.dragging = false; });
+        const endDrag = (e) => {
+          if (e.pointerId !== this.activePointerId) return;
+          this.dragging = false;
+          this.activePointerId = null;
+          try { view.releasePointerCapture(e.pointerId); } catch (err) {}
+        };
+        view.addEventListener('pointerup', endDrag);
+        view.addEventListener('pointercancel', endDrag);
 
-        view.addEventListener('touchstart', (e) => {
-          if (e.touches.length === 1) {
-            this.dragging = true;
-            this.dragLastX = e.touches[0].clientX;
-          }
-        }, { passive: true });
-
-        view.addEventListener('touchmove', (e) => {
-          if (e.touches.length === 1 && !this.state.paused && !this.state.won) {
-            const dx = e.touches[0].clientX - this.dragLastX;
-            this.dragLastX = e.touches[0].clientX;
-            const sens = (this.settings.sensitivity / 5) * 0.0045;
-            this._rotate(-dx * sens);
-          }
-        }, { passive: true });
-
-        view.addEventListener('touchend', () => { this.dragging = false; });
-
-        // D-pad
+        // D-pad — Pointer Events : un seul jeu de gestionnaires pour souris,
+        // tactile et stylet, avec capture pour ne jamais rater un relâchement.
         ['btnFwd', 'btnBack', 'btnLeft', 'btnRight'].forEach((id, i) => {
           const keys = ['arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
           const el = document.getElementById(id);
           const setKey = (v) => { this.keys[keys[i]] = v; };
-          const handlers = {
-            mousedown: (e) => { e.preventDefault();
-              setKey(true); },
-            mouseup: (e) => { e.preventDefault();
-              setKey(false); },
-            mouseleave: (e) => { e.preventDefault();
-              setKey(false); },
-            touchstart: (e) => { e.preventDefault();
-              setKey(true); },
-            touchend: (e) => { e.preventDefault();
-              setKey(false); },
-            touchcancel: (e) => { e.preventDefault();
-              setKey(false); }
-          };
-          Object.entries(handlers).forEach(([evt, fn]) => el.addEventListener(evt, fn));
+          el.addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            try { el.setPointerCapture(e.pointerId); } catch (err) {}
+            setKey(true);
+          });
+          const release = (e) => { e.preventDefault(); setKey(false); };
+          el.addEventListener('pointerup', release);
+          el.addEventListener('pointercancel', release);
+          el.addEventListener('pointerleave', release);
         });
       },
 
