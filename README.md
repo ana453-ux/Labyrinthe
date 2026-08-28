@@ -58,6 +58,8 @@ Le jeu est pensé pour fonctionner aussi bien à la souris/clavier sur PC qu'au 
 - **Plein écran multi-navigateurs.** Prise en charge de l'API standard et de son équivalent préfixé `webkit` (Safari), avec masquage automatique du bouton si aucune des deux n'est disponible (au lieu d'un bouton inopérant), et tentative de verrouillage en orientation paysage lors du passage en plein écran sur mobile.
 - **Pause automatique en arrière-plan.** Le jeu se met en pause tout seul si l'onglet ou l'application passe en arrière-plan (`visibilitychange`), pratique sur mobile lors d'un changement d'application ou d'un appel entrant.
 
+- **Plein écran fonctionnel avec ses contrôles.** Le bouton plein écran ne rend fullscreen que la zone de jeu (`#stage`) : le pavé directionnel, qui était auparavant un bloc séparé plus bas dans la page, a été déplacé à l'intérieur de `#stage` (en overlay semi-transparent ancré en bas de la zone de jeu) afin de rester visible et utilisable une fois en plein écran. Sans ce changement, le plein écran affichait uniquement le canvas sans aucun moyen d'avancer/reculer sur un appareil sans clavier. `#stage` s'agrandit également pour occuper tout l'écran en plein écran (au lieu de rester limité à sa largeur/hauteur habituelles), et le canvas est recalculé automatiquement à chaque entrée/sortie du plein écran.
+
 ## Corrections apportées
 
 Le code fourni était déjà solide dans son ensemble (génération de labyrinthe, moteur de raycasting, sauvegarde de progression) mais contenait deux défauts fonctionnels, corrigés dans cette version :
