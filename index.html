@@ -483,7 +483,7 @@
     #stats {
       position: absolute;
       left: 8px;
-      bottom: 8px;
+      bottom: calc(74px + env(safe-area-inset-bottom));
       font-size: clamp(9px, 2.2vw, 11px);
       color: rgba(217, 220, 226, 0.7);
       background: rgba(8, 9, 12, 0.55);
@@ -585,18 +585,30 @@
     }
 
     #dpad {
-      width: min(640px, 96vw);
-      margin-top: 12px;
+      position: absolute;
+      left: 0;
+      right: 0;
+      bottom: 0;
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 8px;
+      gap: 6px;
+      padding: 10px calc(3% + 4px);
+      padding-bottom: max(10px, env(safe-area-inset-bottom));
+      background: linear-gradient(to top, rgba(6, 8, 10, 0.65), rgba(6, 8, 10, 0.15) 80%, transparent);
+      z-index: 8;
     }
 
     #dpad button {
-      padding: clamp(12px, 4vw, 16px) 0;
+      padding: clamp(10px, 3.2vw, 14px) 0;
       font-size: clamp(16px, 4.5vw, 18px);
       touch-action: none;
-      min-height: 50px;
+      min-height: 46px;
+      background: rgba(23, 27, 34, 0.72);
+      backdrop-filter: blur(2px);
+    }
+
+    #dpad button:hover:not(:disabled) {
+      background: rgba(29, 34, 43, 0.85);
     }
 
     .avatar-preview {
@@ -664,10 +676,6 @@
         grid-template-columns: 1fr;
       }
 
-      #dpad {
-        grid-template-columns: repeat(2, 1fr);
-      }
-
       .setting-row {
         flex-wrap: wrap;
         gap: 6px;
@@ -688,6 +696,20 @@
       #stage {
         max-height: 50vh;
       }
+    }
+
+    /* Plein écran : #stage (et donc le pavé directionnel, désormais placé à
+       l'intérieur) doit occuper tout l'écran au lieu de rester contraint à
+       sa largeur/hauteur/ratio habituels. */
+    #stage:fullscreen,
+    #stage:-webkit-full-screen {
+      width: 100vw;
+      height: 100vh;
+      max-height: 100vh;
+      max-width: 100vw;
+      aspect-ratio: unset;
+      border-radius: 0;
+      border: none;
     }
 
     /* Mobile en paysage : très peu de hauteur disponible, on maximise la
@@ -843,18 +865,17 @@
         <button type="button" class="primary" id="closeLevelMapBtn">✕ Fermer</button>
       </div>
     </div>
+    <div id="dpad">
+      <button type="button" id="btnLeft" aria-label="Tourner à gauche">↺</button>
+      <button type="button" id="btnFwd" aria-label="Avancer">▲</button>
+      <button type="button" id="btnBack" aria-label="Reculer">▼</button>
+      <button type="button" id="btnRight" aria-label="Tourner à droite">↻</button>
+    </div>
   </div>
 
   <div id="toast" class="toast"></div>
 
   <p id="hintLine">Flèches/WASD ou glisser : se déplacer et tourner</p>
-
-  <div id="dpad">
-    <button type="button" id="btnLeft" aria-label="Tourner à gauche">↺</button>
-    <button type="button" id="btnFwd" aria-label="Avancer">▲</button>
-    <button type="button" id="btnBack" aria-label="Reculer">▼</button>
-    <button type="button" id="btnRight" aria-label="Tourner à droite">↻</button>
-  </div>
 
   <div class="panel">
     <div class="field">
@@ -1336,6 +1357,16 @@
         if (window.visualViewport) {
           window.visualViewport.addEventListener('resize', () => this._resize());
         }
+        // Le passage en/hors plein écran change la taille de #stage (voir la
+        // règle CSS #stage:fullscreen) sans forcément déclencher 'resize' au
+        // même moment : on recalcule explicitement, avec un léger délai pour
+        // laisser le navigateur terminer la transition.
+        const onFullscreenChange = () => {
+          this._resize();
+          setTimeout(() => this._resize(), 150);
+        };
+        document.addEventListener('fullscreenchange', onFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', onFullscreenChange);
 
         // Texture par défaut
         this.texture = TextureGen.generate(CONFIG.WALL_TIERS[0]);
