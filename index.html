@@ -239,7 +239,7 @@
       cursor: pointer;
     }
 
-    .setting-row .sens-slider {
+    .setting-row input[type="range"] {
       width: 140px;
     }
 
@@ -604,6 +604,7 @@
       touch-action: none;
       min-height: 46px;
       background: rgba(23, 27, 34, 0.72);
+      -webkit-backdrop-filter: blur(2px);
       backdrop-filter: blur(2px);
     }
 
@@ -687,7 +688,7 @@
         flex: 1;
       }
 
-      .setting-row .sens-slider {
+      .setting-row input[type="range"] {
         width: 100px;
       }
     }
@@ -824,7 +825,7 @@
       </div>
       <div class="setting-row">
         <label for="sensSlider">Sensibilité (glisser)</label>
-        <input type="range" id="sensSlider" class="sens-slider" min="1" max="10" value="5">
+        <input type="range" id="sensSlider" min="1" max="10" value="5">
       </div>
       <div class="setting-row">
         <label for="avatarColor">Couleur avatar</label>
@@ -1315,14 +1316,15 @@
         console.log('🎮 Initialisation du jeu...');
 
         this.view = document.getElementById('view');
-        this.vctx = this.view.getContext('2d');
         this.mini = document.getElementById('mini');
-        this.mctx = this.mini.getContext('2d');
 
         if (!this.view || !this.mini) {
           console.error('❌ Canvas non trouvés');
           return;
         }
+
+        this.vctx = this.view.getContext('2d');
+        this.mctx = this.mini.getContext('2d');
 
         // Settings
         this.settings = Storage.get('settings', {
@@ -1426,8 +1428,6 @@
         if (this.VW > 0 && this.VH > 0) {
           this.zBuffer = new Array(this.VW);
         }
-
-        console.log('📐 Resize:', this.VW, 'x', this.VH);
       },
 
       // ==========================================
@@ -1577,6 +1577,8 @@
 
         document.addEventListener('keydown', (e) => {
           if (e.key === 'Escape' && !this.state.won) this._togglePause();
+          const isFormField = /^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName || '');
+          if (isFormField) return;
           if (e.key === 'f' || e.key === 'F') document.getElementById('fullscreenBtn').click();
           if (e.key === 'r' || e.key === 'R') {
             this._regenerate();
@@ -1591,6 +1593,21 @@
             this._togglePause();
           }
         });
+        // Filet de sécurité : sur certains navigateurs/plateformes, un
+        // changement de focus (alt-tab, clic hors fenêtre) ne déclenche pas
+        // toujours 'visibilitychange'. On vide quand même les touches pour
+        // éviter tout mouvement fantôme, sans forcer la pause dans ce cas.
+        window.addEventListener('blur', () => {
+          this.keys = {};
+        });
+
+        // Panneaux qui recouvrent entièrement la zone de jeu : tant que l'un
+        // d'eux est ouvert, la simulation doit être suspendue (voir _update),
+        // sinon le personnage continue d'avancer/gagner "à l'aveugle" derrière.
+        this._blockingOverlays = [
+          document.getElementById('settingsOverlay'),
+          document.getElementById('levelMapOverlay')
+        ];
 
         this._updateAvatarPreview();
         this._applyMinimapVisibility();
@@ -1602,7 +1619,19 @@
       // INPUT
       // ==========================================
       _setupInput() {
-        document.addEventListener('keydown', (e) => { this.keys[e.key.toLowerCase()] = true; });
+        // Les flèches/lettres ne doivent piloter le personnage que si le
+        // focus n'est pas sur un champ qui utilise déjà ces touches pour
+        // lui-même (slider, select, champ numérique) — sinon régler la
+        // sensibilité au clavier, par exemple, fait aussi tourner le
+        // personnage en même temps.
+        const isFormField = (el) => !!el && /^(INPUT|SELECT|TEXTAREA)$/.test(el.tagName);
+
+        document.addEventListener('keydown', (e) => {
+          if (isFormField(e.target)) return;
+          this.keys[e.key.toLowerCase()] = true;
+        });
+        // Le relâchement est toujours honoré, même depuis un champ, pour ne
+        // jamais laisser une touche bloquée à "enfoncée".
         document.addEventListener('keyup', (e) => { this.keys[e.key.toLowerCase()] = false; });
 
         const view = this.view;
@@ -1615,9 +1644,11 @@
 
         view.addEventListener('pointerdown', (e) => {
           if (this.activePointerId !== null) return; // ignore un 2e doigt
+          if (e.pointerType === 'mouse' && e.button !== 0) return; // ignore clic droit/molette
           this.activePointerId = e.pointerId;
           this.dragging = true;
           this.dragLastX = e.clientX;
+          view.style.cursor = 'grabbing';
           try { view.setPointerCapture(e.pointerId); } catch (err) {}
         });
 
@@ -1634,10 +1665,14 @@
           if (e.pointerId !== this.activePointerId) return;
           this.dragging = false;
           this.activePointerId = null;
+          view.style.cursor = 'grab';
           try { view.releasePointerCapture(e.pointerId); } catch (err) {}
         };
         view.addEventListener('pointerup', endDrag);
         view.addEventListener('pointercancel', endDrag);
+        // Le clic droit ne doit pas ouvrir le menu contextuel du navigateur
+        // sur la zone de jeu (il sert potentiellement à d'autres usages).
+        this.view.parentElement.addEventListener('contextmenu', (e) => e.preventDefault());
 
         // D-pad — Pointer Events : un seul jeu de gestionnaires pour souris,
         // tactile et stylet, avec capture pour ne jamais rater un relâchement.
@@ -1646,6 +1681,7 @@
           const el = document.getElementById(id);
           const setKey = (v) => { this.keys[keys[i]] = v; };
           el.addEventListener('pointerdown', (e) => {
+            if (e.pointerType === 'mouse' && e.button !== 0) return;
             e.preventDefault();
             try { el.setPointerCapture(e.pointerId); } catch (err) {}
             setKey(true);
@@ -1781,6 +1817,13 @@
         this.state.paused = !this.state.paused;
         if (this.state.paused) {
           this.state.pauseStart = performance.now();
+          // Évite qu'une touche restée "bloquée" à true (perte de focus,
+          // changement d'app pendant qu'elle était maintenue, keyup jamais
+          // reçu) ne fasse repartir le personnage tout seul à la reprise.
+          this.keys = {};
+          this.dragging = false;
+          this.activePointerId = null;
+          if (this.view) this.view.style.cursor = 'grab';
           document.getElementById('pauseOverlay').classList.add('show');
         } else {
           this.state.startTime += performance.now() - this.state.pauseStart;
@@ -1828,7 +1871,8 @@
       // ==========================================
       _update(dt) {
         const s = this.state;
-        if (s.won || s.paused) return;
+        const overlayOpen = this._blockingOverlays.some((el) => el.classList.contains('show'));
+        if (s.won || s.paused || overlayOpen) return;
 
         const moveSpeed = CONFIG.MOVE_SPEED * dt;
         const rotSpeed = CONFIG.ROT_SPEED * dt;
